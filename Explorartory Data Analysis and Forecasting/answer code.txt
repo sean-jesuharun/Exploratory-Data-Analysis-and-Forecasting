@@ -1,0 +1,221 @@
+packages <- c("readxl", "factoextra",  "NbClust")
+install.packages(packages)
+
+#Insatll required packages
+install.packages('caret')
+
+#Import required library
+library(caret)
+
+# Loading
+library("readxl")
+library(factoextra)
+library(cluster)
+library(NbClust)
+#xls files
+wine_data <- read_excel("Whitewine_v2.xlsx")
+wine_data
+
+########################### normalizing the data ###########################
+
+#define Min-Max normalization function
+min_max_norm <- function(x) {
+  (x - min(x)) / (max(x) - min(x))
+}
+
+#apply Min-Max normalization to first eleven columns in wine data-set
+wine_norm <- as.data.frame(lapply(wine_data[1:11], min_max_norm))
+
+wine_norm
+boxplot(wine_norm)
+
+#showing the box-plot only for a specific column
+boxplot(wine_norm$fixed.acidity)
+
+
+
+########################### binding the quality ###########################
+
+#add quality to normalized data
+wine_norm <- cbind(wine_norm, quality = wine_data$quality)
+
+wine_norm
+
+wine_norm['quality'][wine_norm['quality'] == 5] <- 1
+wine_norm['quality'][wine_norm['quality'] == 6] <- 2
+wine_norm['quality'][wine_norm['quality'] == 7] <- 3
+wine_norm['quality'][wine_norm['quality'] == 8] <- 4
+
+
+########################### removing outliers ###########################
+
+
+
+# getting the actual values of the outliers for the whole dataset
+outliers <- boxplot(wine_norm)$out
+
+# First finding out in which rows the outliers are
+wine_norm[which(wine_norm %in% outliers),]
+
+# removing rows with the outliers
+wine_norm <- wine_norm[-which(wine_norm$fixed.acidity %in% outliers),]
+wine_norm <- wine_norm[-which(wine_norm$volatile.acidity %in% outliers),]
+wine_norm <- wine_norm[-which(wine_norm$citric.acid %in% outliers),]
+wine_norm <- wine_norm[-which(wine_norm$residual.sugar %in% outliers),]
+wine_norm <- wine_norm[-which(wine_norm$chlorides %in% outliers),]
+wine_norm <- wine_norm[-which(wine_norm$free.sulfur.dioxide %in% outliers),]
+wine_norm <- wine_norm[-which(wine_norm$total.sulfur.dioxide %in% outliers),]
+wine_norm <- wine_norm[-which(wine_norm$density %in% outliers),]
+wine_norm <- wine_norm[-which(wine_norm$pH %in% outliers),]
+wine_norm <- wine_norm[-which(wine_norm$sulphates %in% outliers),]
+wine_norm <- wine_norm[-which(wine_norm$alcohol %in% outliers),]
+#wine_norm <- wine_norm[-which(wine_norm$quality %in% outliers),] 
+
+
+boxplot(wine_norm)
+
+
+
+########################### choosing a value for k ###########################
+
+#### NbClust Method
+#first set the seed function to any value so that your result is reproducible.
+set.seed(26)
+clusterNo=NbClust(wine_norm[1:11],distance="euclidean", min.nc=5,max.nc=10,method="kmeans",index="all") +
+  labs(subtitle = "NbClust method")
+
+#### Elbow method
+fviz_nbclust(wine_norm[1:11], kmeans, method = "wss") +
+  labs(subtitle = "Elbow method")
+
+#### Silhouette method
+fviz_nbclust(wine_norm[1:11], kmeans, method = "silhouette")+
+  labs(subtitle = "Silhouette method")
+
+#### Gap statistic method
+# nboot = 50 to keep the function speedy. 
+set.seed(123)
+fviz_nbclust(wine_norm[1:11], kmeans, nstart = 25,  method = "gap_stat", nboot = 50)+
+  labs(subtitle = "Gap statistic method")
+
+
+
+
+########################### K-Means ###########################
+
+
+#make this example reproducible
+set.seed(1)
+
+############ k =2 ############ 
+
+#perform k-means clustering with k = 2 clusters
+km <- kmeans(wine_norm[1:11], centers = 2, nstart = 25)
+#view results
+str(km)
+#plot results of final k-means model
+fviz_cluster(km, data = wine_norm)
+
+############ k =3 ############ 
+
+#perform k-means clustering with k = 3 clusters
+km <- kmeans(wine_norm[1:11], centers = 3, nstart = 25)
+#view results
+str(km)
+#plot results of final k-means model
+fviz_cluster(km, data = wine_norm)
+
+
+############ k =4 ############ 
+
+#perform k-means clustering with k = 4 clusters
+km <- kmeans(wine_norm[1:11], centers = 4, nstart = 25)
+#view results
+str(km)
+#plot results of final k-means model
+fviz_cluster(km, data = wine_norm)
+
+
+
+
+
+####################### Confusion matrix #########################
+
+
+#add cluster assigment to original data
+final_data <- cbind(wine_norm, cluster = km$cluster)
+
+#view final data
+head(final_data)
+
+
+#Creates vectors having data points
+expected_value <- factor(final_data$quality)
+predicted_value <- factor(final_data$cluster)
+
+#Creating confusion matrix
+example <- confusionMatrix(data=predicted_value, reference = expected_value)
+
+#Display results 
+example
+
+
+
+################################### PCA ########################################
+
+summary(final_data)
+
+wine_PCA = prcomp(final_data[1:11], scale. = TRUE)
+summary(wine_PCA)
+wine_PCA
+
+plot(wine_PCA)
+
+screeplot(wine_PCA, type = "lines", main = "Screenplot for wine dataset")+
+  abline(1,0, col="red", lty=2)
+
+####### making the dataset for first 9 PCs
+wine_PCA_dataset <- wine_PCA$x[,1:9]
+
+print(wine_PCA_dataset)
+
+boxplot(wine_PCA_dataset)
+
+#dim(wine_PCA_dataset)
+#attributes(wine_PCA)
+
+########## adding the quality for the dataset
+wine_PCA_dataset <- cbind(wine_PCA_dataset, quality = final_data$quality)
+
+
+
+############ K-means for k =4 ############ 
+
+#perform k-means clustering with k = 4 clusters
+PCAkm <- kmeans(wine_PCA_dataset[1:9], centers = 4, nstart = 25)
+#view results
+str(PCAkm)
+#plot results of final k-means model
+fviz_cluster(PCAkm, data = wine_PCA_dataset)
+
+
+
+############# Confusion matrix ################
+
+
+#add cluster assigment to original data
+wine_PCA_dataset <- cbind(wine_PCA_dataset, cluster = PCAkm$cluster)
+wine_PCA_dataset <-as.data.frame(wine_PCA_dataset)
+#view wine_PCA data
+head(wine_PCA_dataset)
+
+
+#Creates vectors having data points
+expected_value <- factor(wine_PCA_dataset$quality)
+predicted_value <- factor(wine_PCA_dataset$cluster)
+
+#Creating confusion matrix
+example <- confusionMatrix(data=predicted_value, reference = expected_value)
+
+#Display results 
+example
